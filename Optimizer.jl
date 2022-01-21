@@ -10,10 +10,12 @@ module Optimizer
         numdata::Int
         BestTree::Tree
         LeafCache::Dict{Tuple{Vector{Int},Bool},Leaf}
+        TreeCache::Dict{Vector{Tuple{Vector{Int},Bool}},Bool}
         function Fitter(X::BitMatrix,y::BitArray,lamb::Float64)
             temp=new(X,y,lamb,Tree[],1,size(X)[1])
             temp.BestTree=Tree([Leaf(Int[],true,temp)],temp,0)
             temp.LeafCache=Dict()
+            temp.TreeCache=Dict()
             push!(temp.queue,temp.BestTree)
             temp
         end
@@ -44,6 +46,14 @@ module Optimizer
             l
         end
     end
+    function pushtofitter(fitter::Fitter,tree::Tree)
+        sorttree=map(x->(x.clause,x.can_split),tree.leaves)
+        sort!(sorttree)
+        if !haskey(fitter.TreeCache,sorttree)
+            fitter.TreeCache[sorttree]=true
+            push!(fitter.queue,tree)
+        end
+    end
     function get_splitable_leaves!(fitter::Fitter,t::Tree,nrule::Int)
         num_tosplit=length(filter(x->x.can_split,t.leaves))
         if num_tosplit!=0
@@ -66,7 +76,7 @@ module Optimizer
                         Leaf(clpair,fitter)                       
                     end
                     inserttree=Tree([x...],fitter,t.node+num_tosplit)
-                    push!(fitter.queue,inserttree)
+                    pushtofitter(fitter,inserttree)
                 end
             end
         else
