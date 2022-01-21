@@ -32,17 +32,24 @@ module Optimizer
         Leaf(clause,can_split,get_capture(clause,fitter),fitter.y)
     end
     function get_splitable_leaves!(fitter::Fitter,t::Tree,nrule::Int)
-        if !isempty(filter(x->x.can_split,t.leaves))
+        num_tosplit=length(filter(x->x.can_split,t.leaves))
+        if num_tosplit!=0
             function leave2list(x::Leaf)
                 tt=(x.can_split ? [[Leaf([x.clause...,i],true,fitter),Leaf([x.clause...,-i],true,fitter)] for i in setdiff(1:nrule,abs.(x.clause))] : [[x]])
                 tt
             end
             leave2list(t.leaves[1])
             combo=map(leave2list,t.leaves)
-            trees=map(x->Tree(collect(Iterators.flatten(x)),fitter),Iterators.product(combo...))
+            trees=map(x->collect(Iterators.flatten(x)),Iterators.product(combo...))
             for tree in trees
-                treecombo=map(x::Leaf->x.can_split ? [Leaf(x,true),Leaf(x,false)] : [x],tree.leaves)
-                inserttrees=map(x->Tree([x...],fitter),collect(Iterators.product(treecombo...)))
+                treecombo=map(tree)do x::Leaf
+                    if(x.can_split)
+                        length(x.clause)==nrule ? [Leaf(x,false)] : [Leaf(x,true),Leaf(x,false)]
+                    else
+                        [x]
+                    end 
+                end
+                inserttrees=map(x->Tree([x...],fitter,t.node+num_tosplit),collect(Iterators.product(treecombo...)))
                 push!(fitter.queue,inserttrees...)
             end
         else
