@@ -21,9 +21,24 @@ struct Tree
 end
 
 
+function sorttree(clauses::Vector{Vector{Int}})
+    if isempty(clauses[1])
+        return(clauses)
+    end
+    most=map(clauses)do x
+        abs.(x)
+    end|>t->intersect(t...)
+    i=most[1]
+    function removeele(leaves,i)
+        map(t->setdiff(t,[i]),filter(x-> i in x,leaves)) 
+    end
+    union([[i,x...] for x in sorttree(removeele(clauses,i))],[[-i,x...] for x in sorttree(removeele(clauses,-i))])
+end
+
 function Base.print(t::Tree)
     print("Node:",node(t.leaves)," Miss:",t.miss,"\n\r")
     t=map(x->x.clause,t.leaves)
+    t=sorttree(t)
     sort!(t, rev=true)
     h=max(map(x->length(x),t)...)
     width=2

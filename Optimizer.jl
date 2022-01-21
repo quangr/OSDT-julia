@@ -9,9 +9,11 @@ module Optimizer
         B_c::Float64
         numdata::Int
         BestTree::Tree
+        LeafCache::Dict{Tuple{Vector{Int},Bool},Leaf}
         function Fitter(X::Matrix{Int64},y::Array{Int64},lamb::Float64)
             temp=new(X,y,lamb,Tree[],1,size(X)[1])
             temp.BestTree=Tree([Leaf(Int[],true,temp)],temp,0)
+            temp.LeafCache=Dict()
             push!(temp.queue,temp.BestTree)
             temp
         end
@@ -31,26 +33,41 @@ module Optimizer
     function Leaf(clause::Vector{Int64},can_split::Bool,fitter::Fitter)
         Leaf(clause,can_split,get_capture(clause,fitter),fitter.y)
     end
+    function Leaf(clausepair::Tuple{Vector{Int64}, Bool},fitter::Fitter)
+        (clause,can_split)=clausepair
+        clausepair=(sort!(clause),can_split)
+        if haskey(fitter.LeafCache,clausepair)
+            fitter.LeafCache[clausepair]
+        else
+            l=Leaf(clause,can_split,fitter)
+            fitter.LeafCache[clausepair]=l
+            l
+        end
+    end
     function get_splitable_leaves!(fitter::Fitter,t::Tree,nrule::Int)
         num_tosplit=length(filter(x->x.can_split,t.leaves))
         if num_tosplit!=0
             function leave2list(x::Leaf)
-                tt=(x.can_split ? [[Leaf([x.clause...,i],true,fitter),Leaf([x.clause...,-i],true,fitter)] for i in setdiff(1:nrule,abs.(x.clause))] : [[x]])
+                tt=(x.can_split ? [[([x.clause...,i],true),([x.clause...,-i],true,)] for i in setdiff(1:nrule,abs.(x.clause))] : [[(x.clause,false)]])
                 tt
             end
-            leave2list(t.leaves[1])
             combo=map(leave2list,t.leaves)
             trees=map(x->collect(Iterators.flatten(x)),Iterators.product(combo...))
             for tree in trees
-                treecombo=map(tree)do x::Leaf
-                    if(x.can_split)
-                        length(x.clause)==nrule ? [Leaf(x,false)] : [Leaf(x,true),Leaf(x,false)]
+                treecombos=map(tree)do (x,y)
+                    if y
+                        length(x)==nrule ? [(x,false)] : [(x,true),(x,false)]
                     else
-                        [x]
+                        [(x,y)]
                     end 
                 end
-                inserttrees=map(x->Tree([x...],fitter,t.node+num_tosplit),collect(Iterators.product(treecombo...)))
-                push!(fitter.queue,inserttrees...)
+                for treecombo in Iterators.product(treecombos...)
+                    x=map(treecombo)do clpair
+                        Leaf(clpair,fitter)                       
+                    end
+                    inserttree=Tree([x...],fitter,t.node+num_tosplit)
+                    push!(fitter.queue,inserttree)
+                end
             end
         else
         end
