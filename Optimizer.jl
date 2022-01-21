@@ -11,7 +11,7 @@ module Optimizer
         BestTree::Tree
         function Fitter(X::Matrix{Int64},y::Array{Int64},lamb::Float64)
             temp=new(X,y,lamb,Tree[],1,size(X)[1])
-            temp.BestTree=Tree([Leaf(Int[],true,repeat([0],temp.numdata),y)],temp)
+            temp.BestTree=Tree([Leaf(Int[],true,temp)],temp,0)
             push!(temp.queue,temp.BestTree)
             temp
         end
@@ -67,10 +67,18 @@ module Optimizer
     end
 
     function Tree(leaves::Vector{Leaf},fitter::Fitter)
+        n=node(leaves)
         ac=map(leaves) do x
             x.num_predicted
         end|>sum|>t->t/fitter.numdata
-        Tree(leaves,1-ac,1-ac+fitter.lamb*node(leaves))
+        Tree(leaves,n,1-ac,1-ac+fitter.lamb*n)
+    end
+
+    function Tree(leaves::Vector{Leaf},fitter::Fitter,node::Int)
+        ac=map(leaves) do x
+            x.num_predicted
+        end|>sum|>t->t/fitter.numdata
+        Tree(leaves,node,1-ac,1-ac+fitter.lamb*node)
     end
 
     export Fitter,bbound!

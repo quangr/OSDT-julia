@@ -15,6 +15,7 @@ struct Leaf
 end
 struct Tree
     leaves::Vector{Leaf}
+    node::Int
     miss::Float64
     penalty::Float64
 end
