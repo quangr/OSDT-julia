@@ -1,10 +1,10 @@
 struct Leaf
     clause::Vector{Int}
     can_split::Bool
-    captured::Vector{Int}
+    captured::BitArray
     num_predicted::Float64
     num_captured::Int
-    function Leaf(clause::Vector{Int64},can_split::Bool,captured::Vector{Int},y::Vector{Int})
+    function Leaf(clause::Vector{Int64},can_split::Bool,captured::BitVector,y::BitVector)
         s1=sum(captured.*y)
         s2=sum(captured)
         new(clause,can_split,captured,max(s1,s2-s1),s2)
