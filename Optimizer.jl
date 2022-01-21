@@ -1,39 +1,66 @@
 module Optimizer
     using ..OSDT: Tree,Leaf,node
     using Test
-    mutable struct Fitter
+    mutable struct Logger
+        B_c::Float64
+        BestTree::Tree
+        function Logger()
+            new()
+        end
+    end
+    struct Data
         X::BitMatrix
         y::BitArray
+        numdata::Int
+        minority::BitArray
+        function Data(X::BitMatrix,y::BitArray)
+            numdata=size(X)[1]
+            dict=Dict{BitArray,Vector}()
+            minority=falses(numdata)
+            for (x,label,index) in zip(eachrow(X),y,1:numdata)
+                if haskey(dict,x)
+                    push!(dict[x][Int(label)+1],index)
+                else
+                    dict[x]=[[],[]]
+                    push!(dict[x][Int(label)+1],index)
+                end
+            end
+            for i in dict
+                length(i[2][1])>length(i[2][2]) ? minority[i[2][2]].=true : minority[i[2][1]].=true 
+            end
+            new(X,y,numdata,minority)
+        end
+    end
+    struct Fitter
+        data::Data
         lamb::Float64
         queue::Vector{Tree}
-        B_c::Float64
-        numdata::Int
-        BestTree::Tree
         LeafCache::Dict{Tuple{Vector{Int},Bool},Leaf}
         TreeCache::Dict{Vector{Tuple{Vector{Int},Bool}},Bool}
+        logger::Logger
         function Fitter(X::BitMatrix,y::BitArray,lamb::Float64)
-            temp=new(X,y,lamb,Tree[],1,size(X)[1])
-            temp.BestTree=Tree([Leaf(Int[],true,temp)],temp,0)
-            temp.LeafCache=Dict()
-            temp.TreeCache=Dict()
-            push!(temp.queue,temp.BestTree)
+            temp=new(Data(X,y),lamb,Tree[],Dict(),Dict(),Logger())
+            BestTree=Tree([Leaf(Int[],true,temp)],temp,0)
+            temp.logger.B_c=BestTree.penalty
+            temp.logger.BestTree=BestTree
+            push!(temp.queue,BestTree)
             temp
         end
     end
 
-    function get_capture(clause::Vector{Int},fitter::Fitter)
-        res=trues(fitter.numdata)
+    function get_capture(clause::Vector{Int},data::Data)
+        res=trues(data.numdata)
         for i in clause
             if i<0
-                res.*=view(fitter.X, :, -i).==0
+                res.*=view(data.X, :, -i).==0
             else
-                res.*=view(fitter.X, :, i).==1
+                res.*=view(data.X, :, i).==1
             end
         end
         res
     end
     function Leaf(clause::Vector{Int64},can_split::Bool,fitter::Fitter)
-        Leaf(clause,can_split,get_capture(clause,fitter),fitter.y)
+        Leaf(clause,can_split,get_capture(clause,fitter.data),fitter.data.y)
     end
     function Leaf(clausepair::Tuple{Vector{Int64}, Bool},fitter::Fitter)
         (clause,can_split)=clausepair
@@ -85,33 +112,33 @@ module Optimizer
 
 
     function bbound!(fitter::Fitter)
-        X_train=fitter.X
-        y_train=fitter.y
+        X_train=fitter.data.X
+        y_train=fitter.data.y
         nrule=size(X_train)[2]
         queue=fitter.queue
         while size(queue)[1]>0
             tree=pop!(queue)
-            if tree.penalty<fitter.B_c
-                fitter.B_c=tree.penalty
-                fitter.BestTree=tree
+            if tree.penalty<fitter.logger.B_c
+                fitter.logger.B_c=tree.penalty
+                fitter.logger.BestTree=tree
             end
             get_splitable_leaves!(fitter,tree,nrule)
         end
-        print(fitter.BestTree)
+        print(fitter.logger.BestTree)
     end
 
     function Tree(leaves::Vector{Leaf},fitter::Fitter)
         n=node(leaves)
         ac=map(leaves) do x
             x.num_predicted
-        end|>sum|>t->t/fitter.numdata
+        end|>sum|>t->t/fitter.data.numdata
         Tree(leaves,n,1-ac,1-ac+fitter.lamb*n)
     end
 
     function Tree(leaves::Vector{Leaf},fitter::Fitter,node::Int)
         ac=map(leaves) do x
             x.num_predicted
-        end|>sum|>t->t/fitter.numdata
+        end|>sum|>t->t/fitter.data.numdata
         Tree(leaves,node,1-ac,1-ac+fitter.lamb*node)
     end
 
